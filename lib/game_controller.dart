@@ -8,6 +8,7 @@ import 'local_store.dart';
 import 'native_engine.dart';
 
 const _illegalMoveNotice = '这里不能落子，请选择其他交叉点。';
+const _estimateBudget = SearchBudget(48, 1.2, 0);
 
 class GameController extends ChangeNotifier {
   GameController([this._store]);
@@ -21,9 +22,10 @@ class GameController extends ChangeNotifier {
   int? _selectedPoint;
   String? _notice;
   bool _busy = false;
-  bool _searching = false;
   bool _disposed = false;
   int _searchToken = 0;
+  int? _estimateToken;
+  Future<SearchResult?>? _aiSearch;
   Completer<void>? _activeChange;
 
   GameRecord get record => _record;
@@ -32,8 +34,9 @@ class GameController extends ChangeNotifier {
   int? get selectedPoint => _selectedPoint;
   String? get notice => _notice;
   bool get busy => _busy;
-  bool get searching => _searching;
+  bool get searching => _aiSearch != null;
   bool get ready => _position != null;
+  bool get canEstimateLead => ready && !_busy && _record.result == null;
   bool get canPlay =>
       ready &&
       !_busy &&
@@ -51,7 +54,7 @@ class GameController extends ChangeNotifier {
   bool get canRetrySearch =>
       ready &&
       !_busy &&
-      !_searching &&
+      !searching &&
       _record.result == null &&
       _position!.next != _record.human &&
       _notice != null;
@@ -212,6 +215,33 @@ class GameController extends ChangeNotifier {
     if (point != null && canConfirmSelection) await play(point);
   }
 
+  Future<double?> estimateLead() async {
+    if (!canEstimateLead || _disposed) return null;
+    // An AI move is already evaluating this position when its turn is in progress.
+    if (_aiSearch case final search?) return (await search)?.whiteLead;
+
+    cancelEstimate();
+    final token = ++_searchToken;
+    _estimateToken = token;
+    try {
+      final result = await _engine!.search(
+        token,
+        _estimateBudget,
+        includeCandidates: false,
+      );
+      return _estimateToken == token ? result?.whiteLead : null;
+    } finally {
+      if (_estimateToken == token) _estimateToken = null;
+    }
+  }
+
+  void cancelEstimate() {
+    if (_estimateToken case final token?) {
+      _engine!.cancel(token);
+      _estimateToken = null;
+    }
+  }
+
   Future<void> undo() async {
     if (!canUndo) return;
     await _change(() async {
@@ -287,6 +317,7 @@ class GameController extends ChangeNotifier {
     _notice = null;
     final nextModel = model == _record.model ? null : model;
     _loadingModel = nextModel;
+    cancelEstimate();
     _cancelSearch();
     notifyListeners();
 
@@ -326,42 +357,46 @@ class GameController extends ChangeNotifier {
   void _startSearch() {
     if (_disposed ||
         _busy ||
-        _searching ||
+        searching ||
         !ready ||
         _notice != null ||
         _record.result != null ||
         _position!.next == _record.human) {
       return;
     }
+    cancelEstimate();
     final token = ++_searchToken;
     final budget = _record.difficulty.budgetFor(_record.size);
-    _searching = true;
+    final report = _engine!.search(token, budget);
+    _aiSearch = report;
+    unawaited(_search(token, budget, report));
     notifyListeners();
-    unawaited(_search(token, budget));
   }
 
-  Future<void> _search(int token, SearchBudget budget) async {
+  Future<void> _search(
+    int token,
+    SearchBudget budget,
+    Future<SearchResult?> report,
+  ) async {
     try {
-      final candidates = await _engine!.search(token, budget);
+      final result = await report;
       if (_disposed || token != _searchToken) return;
-      if (candidates.isEmpty) {
-        throw StateError('Unexpected search cancellation');
-      }
-      await _change(() => _play(budget.select(candidates, _random)));
+      if (result == null) throw StateError('Unexpected search cancellation');
+      await _change(() => _play(budget.select(result.candidates, _random)));
     } catch (error) {
       if (_disposed || token != _searchToken) return;
       debugPrint('KataGo search failed: $error');
-      _searching = false;
+      _aiSearch = null;
       _notice = 'AI 出棋失败，请重试。';
       notifyListeners();
     }
   }
 
   void _cancelSearch() {
-    if (!_searching) return;
+    if (!searching) return;
     _engine!.cancel(_searchToken);
     _searchToken++;
-    _searching = false;
+    _aiSearch = null;
   }
 
   void _validateResult(GameRecord record, GameResult? actual) {
@@ -387,6 +422,7 @@ class GameController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    cancelEstimate();
     _cancelSearch();
     final engine = _engine;
     if (engine != null) unawaited(_close(engine));

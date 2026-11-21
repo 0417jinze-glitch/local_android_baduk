@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -161,10 +162,11 @@ int32_t weiqi_play(WeiqiEngine* engine, int32_t point, WeiqiPosition* position) 
 }
 
 int32_t weiqi_search(WeiqiEngine* engine, uint64_t token, int32_t max_visits,
-                      double max_seconds, WeiqiCandidate* results, int32_t capacity) {
+                      double max_seconds, int32_t include_candidates,
+                      WeiqiSearchResult* result) {
   try {
-    if (engine->history.isGameFinished || capacity < 1 ||
-        max_visits < 2 || !std::isfinite(max_seconds) || max_seconds <= 0) {
+    if (engine->history.isGameFinished || max_visits < 2 ||
+        !std::isfinite(max_seconds) || max_seconds <= 0) {
       throw std::invalid_argument("Invalid search");
     }
     std::function<bool()> cancelled = [engine, token] {
@@ -186,6 +188,14 @@ int32_t weiqi_search(WeiqiEngine* engine, uint64_t token, int32_t max_visits,
     search.runWholeSearch(player, &cancelled);
     if (cancelled()) return 0;
 
+    ReportedSearchValues values;
+    result->white_lead = std::numeric_limits<double>::quiet_NaN();
+    if (search.getPrunedRootValues(values) || search.getRootValues(values)) {
+      result->white_lead = values.lead;
+    }
+    result->count = 0;
+    if (!include_candidates) return 1;
+
     const Loc chosen = search.getChosenMoveLoc();
     if (chosen == Board::NULL_LOC || !engine->history.isLegal(engine->board, chosen, player)) {
       throw std::runtime_error("KataGo did not return a legal move");
@@ -193,7 +203,7 @@ int32_t weiqi_search(WeiqiEngine* engine, uint64_t token, int32_t max_visits,
 
     std::vector<AnalysisData> analysis;
     search.getAnalysisData(analysis, 0, false, 1, false);
-    results[0] = {toPoint(chosen, size), 0, 0.0};
+    result->candidates[0] = {toPoint(chosen, size), 0, 0.0};
     int count = 1;
     for (const AnalysisData& move : analysis) {
       if (move.numVisits <= 0 || !std::isfinite(move.utility)) continue;
@@ -202,13 +212,14 @@ int32_t weiqi_search(WeiqiEngine* engine, uint64_t token, int32_t max_visits,
           player == P_WHITE ? move.utility : -move.utility,
       };
       if (move.move == chosen) {
-        results[0] = candidate;
-      } else if (count < capacity && move.move != Board::PASS_LOC &&
+        result->candidates[0] = candidate;
+      } else if (count < WEIQI_MAX_CANDIDATES && move.move != Board::PASS_LOC &&
                  engine->history.isLegal(engine->board, move.move, player)) {
-        results[count++] = candidate;
+        result->candidates[count++] = candidate;
       }
     }
-    return count;
+    result->count = count;
+    return 1;
   } catch (const std::exception& e) {
     engine->error = e.what();
     return -1;

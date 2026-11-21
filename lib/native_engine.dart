@@ -10,6 +10,8 @@ class IllegalMove implements Exception {
   const IllegalMove();
 }
 
+typedef SearchResult = ({double? whiteLead, List<Candidate> candidates});
+
 class NativeEngine {
   NativeEngine._() {
     _events.listen(_onEvent);
@@ -58,9 +60,14 @@ class NativeEngine {
   Future<Position> play(int point) async =>
       await _request(_Play(point)) as Position;
 
-  Future<List<Candidate>> search(int token, SearchBudget budget) async {
+  Future<SearchResult?> search(
+    int token,
+    SearchBudget budget, {
+    bool includeCandidates = true,
+  }) async {
     _latestSearch = token;
-    return await _request(_Search(token, budget)) as List<Candidate>;
+    return await _request(_Search(token, budget, includeCandidates))
+        as SearchResult?;
   }
 
   void cancel(int token) {
@@ -140,9 +147,10 @@ class _Play extends _Command {
 }
 
 class _Search extends _Command {
-  const _Search(this.token, this.budget);
+  const _Search(this.token, this.budget, this.includeCandidates);
   final int token;
   final SearchBudget budget;
+  final bool includeCandidates;
 }
 
 class _Close extends _Command {
@@ -214,22 +222,25 @@ Object? _execute(
       final out = arena<_NativePosition>();
       check(api.play(handle, point, out));
       return out.ref.toPosition();
-    case _Search(:final token, :final budget):
-      const capacity = 16;
-      final out = arena<_NativeCandidate>(capacity);
-      final count = api.search(
+    case _Search(:final token, :final budget, :final includeCandidates):
+      final out = arena<_NativeSearchResult>();
+      final status = api.search(
         handle,
         token,
         budget.visits,
         budget.seconds,
+        includeCandidates ? 1 : 0,
         out,
-        capacity,
       );
-      if (count < 0) throw StateError(api.error(handle).toDartString());
-      return List<Candidate>.generate(count, (index) {
-        final move = out[index];
+      if (status < 0) throw StateError(api.error(handle).toDartString());
+      if (status == 0) return null;
+      final result = out.ref;
+      final lead = result.whiteLead;
+      final candidates = List<Candidate>.generate(result.count, (index) {
+        final move = result.candidates[index];
         return Candidate(move.point, move.visits, move.utility);
       });
+      return (whiteLead: lead.isFinite ? lead : null, candidates: candidates);
     case _Close():
       throw StateError('Close must be handled by the worker');
   }
@@ -277,6 +288,17 @@ final class _NativeCandidate extends Struct {
 
   @Double()
   external double utility;
+}
+
+final class _NativeSearchResult extends Struct {
+  @Double()
+  external double whiteLead;
+
+  @Int32()
+  external int count;
+
+  @Array(16)
+  external Array<_NativeCandidate> candidates;
 }
 
 final _library = DynamicLibrary.open('libweiqi_katago.so');
@@ -354,16 +376,16 @@ class _Bindings {
           Uint64,
           Int32,
           Double,
-          Pointer<_NativeCandidate>,
           Int32,
+          Pointer<_NativeSearchResult>,
         ),
         int Function(
           Pointer<Void>,
           int,
           int,
           double,
-          Pointer<_NativeCandidate>,
           int,
+          Pointer<_NativeSearchResult>,
         )
       >('weiqi_search');
 }

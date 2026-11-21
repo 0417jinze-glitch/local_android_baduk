@@ -23,11 +23,10 @@ void main() {
         for (final size in boardSizes) {
           await kataGo.reset(size, []);
           for (final tier in Difficulty.values) {
-            final candidates = await kataGo.search(
-              ++token,
-              tier.budgetFor(size),
-            );
+            final report = await kataGo.search(++token, tier.budgetFor(size));
+            final candidates = report!.candidates;
             expect(candidates, isNotEmpty);
+            expect(report.whiteLead, isNotNull);
             final chosen = candidates.first.point;
             final position = await kataGo.play(chosen);
             if (chosen != pass) {
@@ -40,9 +39,12 @@ void main() {
             const SearchBudget(100000, 5, 0),
           );
           kataGo.cancel(token);
-          expect(await cancelled, isEmpty);
+          expect(await cancelled, isNull);
           expect(
-            await kataGo.search(++token, Difficulty.beginner.budgetFor(size)),
+            (await kataGo.search(
+              ++token,
+              Difficulty.beginner.budgetFor(size),
+            ))?.candidates,
             isNotEmpty,
           );
 
@@ -69,9 +71,33 @@ void main() {
           throwsStateError,
         );
         expect(
-          await kataGo.search(++token, Difficulty.beginner.budgetFor(9)),
+          (await kataGo.search(
+            ++token,
+            Difficulty.beginner.budgetFor(9),
+          ))?.candidates,
           isNotEmpty,
         );
+
+        for (final leader in Stone.values) {
+          final moves = [
+            for (var point = 0; point < 36; point++)
+              if (leader == Stone.black) ...[point, pass] else ...[pass, point],
+          ];
+          await kataGo.reset(9, moves);
+          final estimate = await kataGo.search(
+            ++token,
+            const SearchBudget(48, 1.2, 0),
+            includeCandidates: false,
+          );
+          expect(estimate!.candidates, isEmpty);
+          expect(
+            estimate.whiteLead,
+            leader == Stone.black ? lessThan(0) : greaterThan(0),
+          );
+          final position = await kataGo.play(80);
+          expect(position.stones.take(36), everyElement(leader.index + 1));
+          expect(position.stones[80], 1);
+        }
       } finally {
         await engine?.close();
         await scratch.delete(recursive: true);
@@ -122,6 +148,48 @@ void main() {
         expect(game.position!.size, 13);
         expect(game.record.moves, isEmpty);
         expect((await store.read())!.moves, isEmpty);
+      } finally {
+        game.dispose();
+        await scratch.delete(recursive: true);
+      }
+    });
+  });
+
+  testWidgets('midgame estimation keeps the game and the AI turn intact', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      final privateFiles = await LocalStore.open();
+      final scratch = await privateFiles.directory.createTemp('lead_test.');
+      final store = LocalStore(scratch);
+      final game = GameController(store);
+      try {
+        const opening = [40, 39];
+        await store.write(const GameRecord(moves: opening));
+        await game.load();
+        game.selectPoint(41);
+        expect(await game.estimateLead(), isNotNull);
+        expect(game.selectedPoint, 41);
+        expect(game.record.moves, opening);
+        expect((await store.read())!.moves, opening);
+
+        final cancelled = game.estimateLead();
+        game.cancelEstimate();
+        expect(await cancelled, isNull);
+        await game.confirmSelection();
+        expect(game.searching, isTrue);
+        final duringAi = game.estimateLead();
+        game.cancelEstimate();
+        expect(await duringAi, isNotNull);
+
+        final deadline = Stopwatch()..start();
+        while (!game.canPlay && deadline.elapsed < const Duration(seconds: 8)) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        expect(game.canPlay, isTrue, reason: game.notice);
+        expect(game.record.moves, hasLength(4));
+        expect(game.record.moves.take(3), [...opening, 41]);
+        expect((await store.read())!.moves, game.record.moves);
       } finally {
         game.dispose();
         await scratch.delete(recursive: true);

@@ -25,6 +25,14 @@ typedef struct {
   double utility;
 } WeiqiCandidate;
 
+enum { WEIQI_MAX_CANDIDATES = 16 };
+
+typedef struct {
+  double white_lead;
+  int32_t count;
+  WeiqiCandidate candidates[WEIQI_MAX_CANDIDATES];
+} WeiqiSearchResult;
+
 // Points are row-major, top left first. -1 is a pass. Black is 1, white is 2.
 // Ordinary operations are serialized on one worker. Only cancel may run concurrently.
 WEIQI_API WeiqiEngine* weiqi_create(const char* model_path, const char* config_path,
@@ -36,10 +44,12 @@ WEIQI_API int32_t weiqi_reset(WeiqiEngine* engine, int32_t size, const int32_t* 
                               int32_t count, WeiqiPosition* position);
 // Returns 1 for an illegal move, 0 for success, and -1 for an engine failure.
 WEIQI_API int32_t weiqi_play(WeiqiEngine* engine, int32_t point, WeiqiPosition* position);
-// Returns the number of candidates, 0 for cancellation, or -1 for an engine failure.
-// The engine's recommendation is first. A search leaves the game history intact.
+// Returns 1 for success, 0 for cancellation, or -1 for an engine failure.
+// White lead is in points, with NaN meaning unavailable. A search leaves history intact.
+// When candidates are requested, the engine's recommendation is first.
 WEIQI_API int32_t weiqi_search(WeiqiEngine* engine, uint64_t token, int32_t max_visits,
-                               double max_seconds, WeiqiCandidate* results, int32_t capacity);
+                               double max_seconds, int32_t include_candidates,
+                               WeiqiSearchResult* result);
 WEIQI_API void weiqi_cancel(WeiqiEngine* engine, uint64_t token);
 
 #ifdef __cplusplus

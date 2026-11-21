@@ -116,6 +116,67 @@ class _GameScreenState extends State<_GameScreen> {
     if (mounted && confirmed) await _game.resign();
   }
 
+  Future<void> _showEstimate() async {
+    if (!_game.canEstimateLead) return;
+    final turn = _game.record.moves.length;
+    final estimate = _game.estimateLead();
+    try {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('局势判定'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('第 $turn 手 · 已计入白贴 $komi 点'),
+              const SizedBox(height: 12),
+              FutureBuilder<double?>(
+                future: estimate,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Row(
+                      children: [
+                        SizedBox.square(
+                          dimension: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 10),
+                        Flexible(child: Text('正在判定…')),
+                      ],
+                    );
+                  }
+                  final lead = snapshot.data;
+                  if (lead == null) return const Text('暂时无法判定，请重试。');
+
+                  final points = lead.abs();
+                  if (points < 0.1) return const Text('局势接近均势');
+                  final leader = lead > 0 ? Stone.white : Stone.black;
+                  final stones = (points / 2).toStringAsFixed(1);
+                  return Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      '${leader.label}棋预计领先 $stones 子（${points.toStringAsFixed(1)} 点）',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      _game.cancelEstimate();
+    }
+  }
+
   Future<bool> _confirm(String title, String message, String action) async {
     return await showDialog<bool>(
           context: context,
@@ -152,6 +213,10 @@ class _GameScreenState extends State<_GameScreen> {
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: _game.canEstimateLead ? _showEstimate : null,
+              child: const Text('判定'),
+            ),
             TextButton.icon(
               onPressed: _game.ready && !_game.busy ? _newGame : null,
               icon: const Icon(Icons.add, size: 19),
