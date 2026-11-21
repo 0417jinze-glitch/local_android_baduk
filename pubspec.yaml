@@ -1,7 +1,7 @@
 name: weiqi
 description: "无需联网的 KataGo 围棋对练。"
 publish_to: 'none'
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: ^3.14.0

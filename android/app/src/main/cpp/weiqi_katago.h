@@ -31,6 +31,7 @@ WEIQI_API WeiqiEngine* weiqi_create(const char* model_path, const char* config_p
                                    int32_t size, char* error, int32_t error_capacity);
 WEIQI_API void weiqi_destroy(WeiqiEngine* engine);
 WEIQI_API const char* weiqi_error(const WeiqiEngine* engine);
+WEIQI_API int32_t weiqi_set_model(WeiqiEngine* engine, const char* model_path, int32_t size);
 WEIQI_API int32_t weiqi_reset(WeiqiEngine* engine, int32_t size, const int32_t* points,
                               int32_t count, WeiqiPosition* position);
 // Returns 1 for an illegal move, 0 for success, and -1 for an engine failure.

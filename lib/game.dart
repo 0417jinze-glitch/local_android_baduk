@@ -16,6 +16,18 @@ enum Stone {
   Stone get opponent => this == black ? white : black;
 }
 
+enum AiModel {
+  b6c96('kata1-b6c96-s175395328-d26788732.txt.gz', 4967720),
+  b10c128('kata1-b10c128-s1141046784-d204142634.txt.gz', 14466254),
+  b15c192('kata1-b15c192-s1672170752-d466197061.txt.gz', 48038914),
+  b20c256x2('kata1-b20c256x2-s5303129600-d1228401921.bin.gz', 87358203);
+
+  const AiModel(this.asset, this.assetBytes);
+
+  final String asset;
+  final int assetBytes;
+}
+
 enum Difficulty {
   beginner('初级'),
   intermediate('中级'),
@@ -128,6 +140,7 @@ class GameRecord {
     this.size = 9,
     this.human = Stone.black,
     this.difficulty = Difficulty.intermediate,
+    this.model = AiModel.b6c96,
     this.moves = const [],
     this.result,
   });
@@ -135,6 +148,7 @@ class GameRecord {
   final int size;
   final Stone human;
   final Difficulty difficulty;
+  final AiModel model;
   final List<int> moves;
   final GameResult? result;
 
@@ -143,6 +157,7 @@ class GameRecord {
     'size': size,
     'human': human.name,
     'difficulty': difficulty.name,
+    'model': model.name,
     'rules': rules,
     'komi': komi,
     'moves': moves,
@@ -164,10 +179,14 @@ class GameRecord {
     }
 
     final result = json['result'] as Map<String, dynamic>?;
+    final modelName = json['model'] as String?;
     return GameRecord(
       size: size,
       human: Stone.values.byName(json['human'] as String),
       difficulty: Difficulty.values.byName(json['difficulty'] as String),
+      model: modelName == null
+          ? AiModel.b6c96
+          : AiModel.values.byName(modelName),
       moves: moves,
       result: result == null ? null : GameResult.fromJson(result),
     );

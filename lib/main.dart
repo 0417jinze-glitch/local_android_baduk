@@ -93,7 +93,12 @@ class _GameScreenState extends State<_GameScreen> {
       builder: (context) => _NewGameSheet(record: _game.record),
     );
     if (!mounted || settings == null) return;
-    await _game.startGame(settings.size, settings.human, settings.difficulty);
+    await _game.startGame(
+      settings.size,
+      settings.human,
+      settings.difficulty,
+      model: settings.model,
+    );
   }
 
   Future<void> _restart() async {
@@ -169,13 +174,17 @@ class _GameScreenState extends State<_GameScreen> {
   }
 
   Widget _buildLoading() {
+    final model = _game.loadingModel;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_game.busy) const CircularProgressIndicator(),
           if (_game.busy) const SizedBox(height: 18),
-          Text(_game.notice ?? '正在加载本地引擎…'),
+          Text(
+            _game.notice ??
+                (model == null ? '正在加载本地引擎…' : '正在加载 ${model.name}…'),
+          ),
           if (!_game.busy)
             TextButton(onPressed: _game.load, child: const Text('重试')),
         ],
@@ -306,6 +315,11 @@ class _GameScreenState extends State<_GameScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              _ModelPicker(
+                model: record.model,
+                onChanged: _game.busy ? null : _game.setModel,
+              ),
               const SizedBox(height: 14),
               const Text(
                 '中国规则（OGS） · 白贴 7.5 点',
@@ -410,7 +424,12 @@ class _StatusCard extends StatelessWidget {
     final record = game.record;
     final position = game.position!;
     final result = record.result;
-    final status = result == null ? _turnLabel() : _resultLabel(result);
+    final loadingModel = game.loadingModel;
+    final status = loadingModel != null
+        ? '正在加载 ${loadingModel.name}…'
+        : result == null
+        ? _turnLabel()
+        : _resultLabel(result);
 
     return Container(
       decoration: BoxDecoration(
@@ -436,7 +455,7 @@ class _StatusCard extends StatelessWidget {
             liveRegion: true,
             child: Row(
               children: [
-                if (game.searching) ...[
+                if (game.searching || loadingModel != null) ...[
                   const SizedBox(
                     width: 15,
                     height: 15,
@@ -454,7 +473,7 @@ class _StatusCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (result == null) ...[
+                if (result == null && loadingModel == null) ...[
                   const SizedBox(width: 9),
                   Text(
                     '${position.next.label}棋行棋',
@@ -526,6 +545,7 @@ class _NewGameSheetState extends State<_NewGameSheet> {
   late int _size = widget.record.size;
   late Stone _human = widget.record.human;
   late Difficulty _difficulty = widget.record.difficulty;
+  late AiModel _model = widget.record.model;
 
   @override
   Widget build(BuildContext context) {
@@ -569,11 +589,21 @@ class _NewGameSheetState extends State<_NewGameSheet> {
               (level) => level.label,
               (level) => setState(() => _difficulty = level),
             ),
+            const SizedBox(height: 12),
+            _ModelPicker(
+              model: _model,
+              onChanged: (model) => setState(() => _model = model),
+            ),
             const SizedBox(height: 22),
             FilledButton(
               onPressed: () => Navigator.pop(
                 context,
-                GameRecord(size: _size, human: _human, difficulty: _difficulty),
+                GameRecord(
+                  size: _size,
+                  human: _human,
+                  difficulty: _difficulty,
+                  model: _model,
+                ),
               ),
               child: const Text('开始对弈'),
             ),
@@ -613,6 +643,46 @@ class _NewGameSheetState extends State<_NewGameSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ModelPicker extends StatelessWidget {
+  const _ModelPicker({required this.model, required this.onChanged});
+
+  final AiModel model;
+  final ValueChanged<AiModel>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Text(
+          'AI 模型',
+          style: TextStyle(color: _quiet, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: DropdownButton<AiModel>(
+            isExpanded: true,
+            value: model,
+            items: [
+              for (final model in AiModel.values)
+                DropdownMenuItem(
+                  value: model,
+                  child: Text(
+                    '${model.name} · ${(model.assetBytes / 1000000).toStringAsFixed(1)} MB',
+                  ),
+                ),
+            ],
+            onChanged: onChanged == null
+                ? null
+                : (model) {
+                    if (model != null) onChanged!(model);
+                  },
+          ),
+        ),
+      ],
     );
   }
 }

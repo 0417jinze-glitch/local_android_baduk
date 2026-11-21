@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <utility>
 
 #include "neuralnet/nninterface.h"
 #include "program/setup.h"
@@ -76,12 +77,18 @@ struct WeiqiEngine {
   }
 
   void loadEvaluator(int size) {
-    if (evaluator && evaluator->getNNXLen() == size) return;
+    useModel(model_path, size);
+  }
 
+  void useModel(std::string path, int size) {
+    if (evaluator && model_path == path && evaluator->getNNXLen() == size) return;
+
+    // Drop the old evaluator before building the new one to keep peak memory down.
     evaluator.reset();
     evaluator.reset(Setup::initializeNNEvaluator(
-        model_path, model_path, "", config, logger, random, params.numThreads,
+        path, path, "", config, logger, random, params.numThreads,
         size, size, 2, true, true, Setup::SETUP_FOR_GTP));
+    model_path = std::move(path);
   }
 };
 
@@ -108,6 +115,17 @@ void weiqi_destroy(WeiqiEngine* engine) {
 
 const char* weiqi_error(const WeiqiEngine* engine) {
   return engine->error.c_str();
+}
+
+int32_t weiqi_set_model(WeiqiEngine* engine, const char* model_path, int32_t size) {
+  try {
+    if (!supportedSize(size)) throw std::invalid_argument("Unsupported board size");
+    engine->useModel(model_path, size);
+    return 0;
+  } catch (const std::exception& e) {
+    engine->error = e.what();
+    return -1;
+  }
 }
 
 int32_t weiqi_reset(WeiqiEngine* engine, int32_t size, const int32_t* points,

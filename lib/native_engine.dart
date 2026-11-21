@@ -51,6 +51,10 @@ class NativeEngine {
   Future<Position> reset(int size, List<int> moves) async =>
       await _request(_Reset(size, moves)) as Position;
 
+  Future<void> setModel(String path, int size) async {
+    await _request(_SetModel(path, size));
+  }
+
   Future<Position> play(int point) async =>
       await _request(_Play(point)) as Position;
 
@@ -124,6 +128,12 @@ class _Reset extends _Command {
   final List<int> moves;
 }
 
+class _SetModel extends _Command {
+  const _SetModel(this.path, this.size);
+  final String path;
+  final int size;
+}
+
 class _Play extends _Command {
   const _Play(this.point);
   final int point;
@@ -179,7 +189,7 @@ void _runWorker((SendPort, String, String, int) args) {
   });
 }
 
-Object _execute(
+Object? _execute(
   _Bindings api,
   Pointer<Void> handle,
   _Command command,
@@ -191,6 +201,9 @@ Object _execute(
   }
 
   switch (command) {
+    case _SetModel(:final path, :final size):
+      check(api.setModel(handle, path.toNativeUtf8(allocator: arena), size));
+      return null;
     case _Reset(:final size, :final moves):
       final points = arena<Int32>(moves.length);
       points.asTypedList(moves.length).setAll(0, moves);
@@ -303,6 +316,12 @@ class _Bindings {
         Pointer<Utf8> Function(Pointer<Void>),
         Pointer<Utf8> Function(Pointer<Void>)
       >('weiqi_error');
+
+  final setModel = _library
+      .lookupFunction<
+        Int32 Function(Pointer<Void>, Pointer<Utf8>, Int32),
+        int Function(Pointer<Void>, Pointer<Utf8>, int)
+      >('weiqi_set_model');
 
   final reset = _library
       .lookupFunction<

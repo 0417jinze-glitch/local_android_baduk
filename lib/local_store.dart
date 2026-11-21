@@ -5,46 +5,53 @@ import 'package:flutter/services.dart';
 
 import 'game.dart';
 
-const modelAsset = 'kata1-b6c96-s175395328-d26788732.txt.gz';
-const configAsset = 'mobile.cfg';
-
 class LocalStore {
   LocalStore(this.directory);
+
+  static const _channel = MethodChannel('app.weiqi/files');
+  static const _configAsset = 'mobile.cfg';
 
   final Directory directory;
 
   File get _saveFile => File('${directory.path}/game.json');
+  String get _enginePath => '${directory.path}/engine';
 
   static Future<LocalStore> open() async {
-    const channel = MethodChannel('app.weiqi/files');
-    final path = await channel.invokeMethod<String>('directory');
+    final path = await _channel.invokeMethod<String>('directory');
     if (path == null) {
       throw StateError('Android did not return the files directory');
     }
     return LocalStore(Directory(path));
   }
 
-  Future<({String model, String config})> prepareEngine() async {
-    final engineDirectory = await Directory('${directory.path}/engine')
-        .create();
-    final model = File('${engineDirectory.path}/$modelAsset');
-    final config = File('${engineDirectory.path}/$configAsset');
-    const modelLength = 4967720;
-
-    if (!await model.exists() || await model.length() != modelLength) {
-      final bytes = await rootBundle.load('assets/engine/$modelAsset');
-      await _replace(
-        model,
-        bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
-      );
+  Future<String> prepareModel(AiModel model) async {
+    await Directory(_enginePath).create();
+    final target = File('$_enginePath/${model.asset}');
+    if (!await target.exists() || await target.length() != model.assetBytes) {
+      final pending = File('${target.path}.tmp');
+      await _channel.invokeMethod<void>('copyModel', {
+        'asset': model.asset,
+        'path': pending.path,
+      });
+      if (await pending.length() != model.assetBytes) {
+        throw const FormatException('Incomplete KataGo model asset');
+      }
+      await pending.rename(target.path);
     }
+    return target.path;
+  }
 
-    final bytes = await rootBundle.load('assets/engine/$configAsset');
+  Future<({String model, String config})> prepareEngine([
+    AiModel model = AiModel.b6c96,
+  ]) async {
+    final modelPath = await prepareModel(model);
+    final config = File('$_enginePath/$_configAsset');
+    final bytes = await rootBundle.load('assets/engine/$_configAsset');
     await _replace(
       config,
       bytes.buffer.asUint8List(bytes.offsetInBytes, bytes.lengthInBytes),
     );
-    return (model: model.path, config: config.path);
+    return (model: modelPath, config: config.path);
   }
 
   Future<GameRecord?> read() async {

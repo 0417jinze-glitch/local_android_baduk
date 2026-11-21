@@ -17,6 +17,7 @@ class GameController extends ChangeNotifier {
   NativeEngine? _engine;
   GameRecord _record = const GameRecord();
   Position? _position;
+  AiModel? _loadingModel;
   int? _selectedPoint;
   String? _notice;
   bool _busy = false;
@@ -27,6 +28,7 @@ class GameController extends ChangeNotifier {
 
   GameRecord get record => _record;
   Position? get position => _position;
+  AiModel? get loadingModel => _loadingModel;
   int? get selectedPoint => _selectedPoint;
   String? get notice => _notice;
   bool get busy => _busy;
@@ -77,7 +79,10 @@ class GameController extends ChangeNotifier {
         debugPrint('Saved game could not be read: $error');
         _notice = '上一局存档无法读取，已打开空棋盘。';
       }
-      final files = await store.prepareEngine();
+      if (_disposed) return;
+      _loadingModel = restored.model;
+      notifyListeners();
+      final files = await store.prepareEngine(restored.model);
       if (_disposed) return;
       engine = await NativeEngine.start(
         files.model,
@@ -91,7 +96,7 @@ class GameController extends ChangeNotifier {
         _validateResult(restored, position.result);
       } catch (error) {
         debugPrint('Saved moves could not be replayed: $error');
-        restored = const GameRecord();
+        restored = GameRecord(model: restored.model);
         position = await engine.reset(restored.size, restored.moves);
         _notice = '上一局棋谱无法恢复，已打开空棋盘。';
       }
@@ -107,6 +112,7 @@ class GameController extends ChangeNotifier {
       _notice = '本地引擎加载失败，请重试。';
     } finally {
       if (engine != null) unawaited(_close(engine));
+      _loadingModel = null;
       _busy = false;
       if (!_disposed) {
         notifyListeners();
@@ -115,14 +121,45 @@ class GameController extends ChangeNotifier {
     }
   }
 
-  Future<void> startGame(int size, Stone human, Difficulty difficulty) =>
-      _change(() async {
-        final position = await _engine!.reset(size, const []);
-        await _commit(
-          GameRecord(size: size, human: human, difficulty: difficulty),
-          position,
-        );
-      });
+  Future<void> startGame(
+    int size,
+    Stone human,
+    Difficulty difficulty, {
+    AiModel? model,
+  }) => _change(
+    () async {
+      final position = await _engine!.reset(size, const []);
+      await _commit(
+        GameRecord(
+          size: size,
+          human: human,
+          difficulty: difficulty,
+          model: model ?? _record.model,
+        ),
+        position,
+      );
+    },
+    model: model,
+    modelBoardSize: size,
+  );
+
+  Future<void> setModel(AiModel model) async {
+    if (model == _record.model) return;
+    await _change(
+      () => _commit(
+        GameRecord(
+          size: _record.size,
+          human: _record.human,
+          difficulty: _record.difficulty,
+          model: model,
+          moves: _record.moves,
+          result: _record.result,
+        ),
+        _position!,
+      ),
+      model: model,
+    );
+  }
 
   Future<void> setDifficulty(Difficulty difficulty) async {
     if (difficulty == _record.difficulty) return;
@@ -132,6 +169,7 @@ class GameController extends ChangeNotifier {
           size: _record.size,
           human: _record.human,
           difficulty: difficulty,
+          model: _record.model,
           moves: _record.moves,
           result: _record.result,
         ),
@@ -209,6 +247,7 @@ class GameController extends ChangeNotifier {
     size: _record.size,
     human: _record.human,
     difficulty: _record.difficulty,
+    model: _record.model,
     moves: moves,
     result: result,
   );
@@ -228,7 +267,16 @@ class GameController extends ChangeNotifier {
     _position = position;
   }
 
-  Future<void> _change(Future<void> Function() operation) async {
+  Future<void> _loadModel(AiModel model, int size) async {
+    final path = await _store!.prepareModel(model);
+    await _engine!.setModel(path, size);
+  }
+
+  Future<void> _change(
+    Future<void> Function() operation, {
+    AiModel? model,
+    int? modelBoardSize,
+  }) async {
     while (_activeChange != null) {
       await _activeChange!.future;
     }
@@ -237,18 +285,26 @@ class GameController extends ChangeNotifier {
     _activeChange = completed;
     _busy = true;
     _notice = null;
+    final nextModel = model == _record.model ? null : model;
+    _loadingModel = nextModel;
     _cancelSearch();
     notifyListeners();
 
+    var modelChanged = false;
     try {
+      if (nextModel != null) {
+        await _loadModel(nextModel, modelBoardSize ?? _record.size);
+        modelChanged = true;
+      }
       await operation();
     } on IllegalMove {
       _notice = _illegalMoveNotice;
     } catch (error) {
       debugPrint('Game operation failed: $error');
       try {
+        if (modelChanged) await _loadModel(_record.model, _record.size);
         await _engine!.reset(_record.size, _record.moves);
-        _notice = '操作未能保存，已恢复当前对局。';
+        _notice = nextModel == null ? '操作未能保存，已恢复当前对局。' : '模型切换失败，已恢复当前对局。';
       } catch (error) {
         debugPrint('Game rollback failed: $error');
         _position = null;
@@ -257,6 +313,7 @@ class GameController extends ChangeNotifier {
       }
     } finally {
       _activeChange = null;
+      _loadingModel = null;
       _busy = false;
       completed.complete();
       if (!_disposed) {

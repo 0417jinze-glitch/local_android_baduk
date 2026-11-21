@@ -19,7 +19,16 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 
 ## 模型与难度
 
-使用官方轻量模型 `kata1-b6c96-s175395328-d26788732`。官方目录将该模型标记为从 g170 导入，适用 CC0 1.0。完整许可随 APK 分发，应用右上角可查看。模型的 SHA-256 为 `48d6754de3c4754f95bf6a5ca40957a49e5e915aaaeede133a17b9ccf8fa5fcb`。[官方模型目录](https://katagotraining.org/networks/) · [模型许可](https://katagotraining.org/network_license/)
+在「新对局」或对弈界面下方的「AI 模型」中选择四个内置模型。默认使用 `b6c96`，局中切换保留棋谱，新模型用于下一手 AI。存档记录当前模型，旧存档默认使用 `b6c96`。
+
+| 模型 | 内置模型文件 | 压缩大小 |
+| --- | --- | ---: |
+| `b6c96` | `kata1-b6c96-s175395328-d26788732.txt.gz` | 4.97 MB |
+| `b10c128` | `kata1-b10c128-s1141046784-d204142634.txt.gz` | 14.47 MB |
+| `b15c192` | `kata1-b15c192-s1672170752-d466197061.txt.gz` | 48.04 MB |
+| `b20c256x2` | `kata1-b20c256x2-s5303129600-d1228401921.bin.gz` | 87.36 MB |
+
+四个模型都从 g170 导入，适用 CC0 1.0。KataGo 官方评级中，`b20c256x2` 高于表中的 `b15c192`。完整许可随 APK 分发，应用右上角可查看。[官方模型目录](https://katagotraining.org/networks/) · [模型许可](https://katagotraining.org/network_license/)
 
 | 棋盘 | 初级访问上限 / 秒 | 中级访问上限 / 秒 | 高级访问上限 / 秒 |
 | --- | ---: | ---: | ---: |
@@ -33,7 +42,7 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 
 在 ARM64 模拟器开启飞行模式后安装并首次启动 APK，分别使用 Android API 37 的 4 KB 环境和 Android API 35 的 16 KB 环境验证。三种棋盘均完成落子和 AI 应答，验证了执白时 AI 先行、难度选择、占点拒绝、悔棋和重开。强制结束进程后，棋盘、执子方、难度、认输结果和连续停一手的计分结果均恢复。
 
-下表是 4 KB ARM64 模拟器中原生引擎的样本。冷加载计时从创建引擎到对应尺寸的模型可用。每档测一手，RSS 为原生验证进程截至该尺寸的峰值。
+下表是在 4 KB ARM64 模拟器中使用 `b6c96` 的原生引擎样本。冷加载计时从创建引擎到对应尺寸的模型可用。每档测一手，RSS 为原生验证进程截至该尺寸的峰值。
 
 | 棋盘 | 冷加载 | 初级 | 中级 | 高级 | 峰值 RSS |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -41,7 +50,7 @@ adb install -r build/app/outputs/flutter-apk/app-release.apk
 | 13×13 | 133 ms | 27 ms | 50 ms | 122 ms | 44.8 MiB |
 | 19×19 | 133 ms | 36 ms | 78 ms | 181 ms | 50.8 MiB |
 
-Android 集成测试覆盖三种尺寸和三档搜索、提子、占点、劫争、禁入、计分、取消搜索、局中切换难度、悔棋、换盘和恢复 AI 回合。
+Android 集成测试覆盖三种尺寸和三档搜索、提子、占点、劫争、禁入、计分、取消搜索、局中切换难度、悔棋、换盘和恢复 AI 回合。四个模型均在飞行模式下通过 19×19 搜索测试。界面验证覆盖开局选模型、局中切换、重启恢复和旧存档读取。
 
 ```sh
 flutter test integration_test/offline_engine_test.dart -d <device-id>

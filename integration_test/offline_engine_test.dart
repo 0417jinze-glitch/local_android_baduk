@@ -64,6 +64,14 @@ void main() {
 
         await kataGo.reset(9, [1, 80, 9, 79, 11, 78, 19]);
         await expectLater(kataGo.play(10), throwsA(isA<IllegalMove>()));
+        await expectLater(
+          kataGo.setModel('${scratch.path}/missing.bin.gz', 9),
+          throwsStateError,
+        );
+        expect(
+          await kataGo.search(++token, Difficulty.beginner.budgetFor(9)),
+          isNotEmpty,
+        );
       } finally {
         await engine?.close();
         await scratch.delete(recursive: true);
@@ -181,6 +189,64 @@ void main() {
         game.selectPoint(10);
         await game.startGame(13, Stone.black, Difficulty.intermediate);
         expect(game.selectedPoint, isNull);
+      } finally {
+        game.dispose();
+        await scratch.delete(recursive: true);
+      }
+    });
+  });
+
+  testWidgets('all four models can search and switching preserves the game', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      final privateFiles = await LocalStore.open();
+      final scratch = await privateFiles.directory.createTemp('model_test.');
+      final store = LocalStore(scratch);
+      final game = GameController(store);
+      try {
+        const opening = [180, 181];
+        const saved = GameRecord(
+          size: 19,
+          difficulty: Difficulty.advanced,
+          moves: opening,
+        );
+        final legacy = saved.toJson()..remove('model');
+        expect(GameRecord.fromJson(legacy).model, AiModel.b6c96);
+        await store.write(saved);
+        await game.load();
+
+        for (final model in AiModel.values) {
+          await game.setModel(model);
+          expect(game.record.model, model, reason: game.notice);
+          expect(game.record.moves, opening);
+          expect(game.position!.stones[180], 1);
+          expect(game.position!.stones[181], 2);
+          expect((await store.read())!.model, model);
+
+          await game.play(0);
+          final deadline = Stopwatch()..start();
+          while (game.searching || game.busy) {
+            if (deadline.elapsed > const Duration(seconds: 12)) break;
+            await Future<void>.delayed(const Duration(milliseconds: 25));
+          }
+          expect(game.canPlay, isTrue, reason: '${model.name}: ${game.notice}');
+          expect(game.record.moves, hasLength(4));
+          expect((await store.read())!.model, model);
+          await game.undo();
+        }
+
+        await game.play(0);
+        expect(game.searching, isTrue);
+        await game.setModel(AiModel.b6c96);
+        final deadline = Stopwatch()..start();
+        while (game.searching || game.busy) {
+          if (deadline.elapsed > const Duration(seconds: 8)) break;
+          await Future<void>.delayed(const Duration(milliseconds: 25));
+        }
+        expect(game.canPlay, isTrue, reason: game.notice);
+        expect(game.record.moves, hasLength(4));
+        expect((await store.read())!.model, AiModel.b6c96);
       } finally {
         game.dispose();
         await scratch.delete(recursive: true);

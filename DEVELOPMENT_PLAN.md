@@ -21,8 +21,8 @@
 - **Flutter 界面与对局流程**。使用 `CustomPainter` 绘制棋盘、星位和棋子，根据当前尺寸计算落点。Flutter 负责交互与对局流程，KataGo 负责判定合法性、更新棋盘和计分。界面使用引擎返回的棋盘状态。
 - **Android 原生引擎**。使用 Android NDK 和 CMake 将 KataGo 编译为 `arm64-v8a` 动态库，首版采用 Eigen CPU 后端。通过 C 接口和 `dart:ffi` 提供开局、落子、搜索、取消搜索和计分能力。模型加载和搜索运行在后台 Dart isolate。[KataGo 编译文档](https://github.com/lightvector/KataGo/blob/master/Compiling.md) · [Flutter FFI 文档](https://docs.flutter.dev/interop/dart-ffi)
 - **AI 搜索与取消**。先进行可取消的搜索，确认结果对应当前对局、回合和难度设置后再提交。悔棋、重开或切换尺寸时取消旧搜索，并丢弃迟到结果。AI 思考期间调整难度时，取消当前搜索并按新难度重新计算这一手。关闭玩家回合期间的后台思考。[KataGo GTP 扩展文档](https://github.com/lightvector/KataGo/blob/master/docs/GTP_Extensions.md)
-- **AI 难度**。三档共用一个轻量 KataGo 模型。初级采用较低的搜索预算，在较宽的候选评分范围内加权选点。中级增加搜索预算并缩小候选范围。高级在真机响应时间预算内使用最高的访问上限，采用引擎推荐着法。只有引擎推荐停一手时才让 AI 停着。按棋盘尺寸校准搜索上限和候选评分范围，使用初级、中级、高级作为相对难度标签。[KataGo 搜索接口](https://github.com/lightvector/KataGo/blob/master/docs/GTP_Extensions.md) · [KataGo 配置示例](https://github.com/lightvector/KataGo/blob/master/cpp/configs/gtp_example.cfg)
-- **模型与存档**。将轻量模型和引擎配置随 APK 分发，首次运行时将模型复制到应用私有目录。存档记录棋盘尺寸、执子颜色、AI 难度、规则、贴目、每手落子或停着以及终局状态。恢复时按顺序重放完整棋谱，重建局面和重复局面判定所需的历史。[KataGo 官方模型目录](https://katagotraining.org/networks/)
+- **AI 难度**。每个模型都支持三档难度。初级采用较低的搜索预算，在较宽的候选评分范围内加权选点。中级增加搜索预算并缩小候选范围。高级在真机响应时间预算内使用最高的访问上限，采用引擎推荐着法。只有引擎推荐停一手时才让 AI 停着。按棋盘尺寸校准搜索上限和候选评分范围，使用初级、中级、高级作为相对难度标签。[KataGo 搜索接口](https://github.com/lightvector/KataGo/blob/master/docs/GTP_Extensions.md) · [KataGo 配置示例](https://github.com/lightvector/KataGo/blob/master/cpp/configs/gtp_example.cfg)
+- **模型与存档**。随 APK 分发四个模型和引擎配置，每个模型首次使用时复制到应用私有目录。开局或局中可切换模型，局中切换保留当前棋谱。存档记录棋盘尺寸、执子颜色、AI 难度、模型、规则、贴目、每手落子或停着以及终局状态。恢复时按顺序重放完整棋谱，重建局面和重复局面判定所需的历史。[KataGo 官方模型目录](https://katagotraining.org/networks/)
 
 ## 开发里程碑
 
