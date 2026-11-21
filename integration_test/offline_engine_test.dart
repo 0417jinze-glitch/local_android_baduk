@@ -120,4 +120,71 @@ void main() {
       }
     });
   });
+
+  testWidgets('precise placement persists only the confirmed intersection', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      final privateFiles = await LocalStore.open();
+      final scratch = await privateFiles.directory.createTemp(
+        'placement_test.',
+      );
+      final store = LocalStore(scratch);
+      final game = GameController(store);
+      try {
+        await game.load();
+        await game.startGame(19, Stone.black, Difficulty.beginner);
+        game.selectPoint(0);
+        game.shiftSelection(-1, 0);
+        game.shiftSelection(0, -1);
+        expect(game.selectedPoint, 0);
+        game.shiftSelection(1, 0);
+        game.shiftSelection(0, 1);
+        expect(game.selectedPoint, 20);
+        game.shiftSelection(0, -1);
+        game.shiftSelection(-1, 0);
+        expect(game.selectedPoint, 0);
+        expect(game.record.moves, isEmpty);
+        expect((await store.read())!.moves, isEmpty);
+
+        game.selectPoint(360);
+        game.shiftSelection(1, 0);
+        game.shiftSelection(0, 1);
+        expect(game.selectedPoint, 360);
+        game.selectPoint(null);
+        await game.confirmSelection();
+        expect(game.record.moves, isEmpty);
+
+        game.selectPoint(0);
+        game.shiftSelection(1, 0);
+        game.shiftSelection(0, 1);
+        await game.confirmSelection();
+        expect(game.selectedPoint, isNull);
+        expect((await store.read())!.moves.first, 20);
+
+        final deadline = Stopwatch()..start();
+        while (!game.canPlay && deadline.elapsed < const Duration(seconds: 8)) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+        expect(game.canPlay, isTrue, reason: game.notice);
+        game.selectPoint(20);
+        expect(game.canConfirmSelection, isFalse);
+        await game.confirmSelection();
+        expect(game.record.moves, hasLength(2));
+        await game.undo();
+        expect(game.selectedPoint, isNull);
+        expect(game.record.moves, isEmpty);
+
+        game.selectPoint(360);
+        await game.startGame(13, Stone.black, Difficulty.intermediate);
+        expect(game.selectedPoint, isNull);
+        game.selectPoint(10);
+        await game.startGame(13, Stone.black, Difficulty.intermediate);
+        expect(game.selectedPoint, isNull);
+      } finally {
+        game.dispose();
+        await scratch.delete(recursive: true);
+      }
+    });
+  });
 }

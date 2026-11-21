@@ -192,16 +192,17 @@ class _GameScreenState extends State<_GameScreen> {
         : last == pass
         ? '第 ${record.moves.length} 手 · 停一手'
         : '第 ${record.moves.length} 手';
-    return Center(
+    return Align(
+      alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _StatusCard(game: _game),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Text(
@@ -216,13 +217,38 @@ class _GameScreenState extends State<_GameScreen> {
                   Text(lastText, style: const TextStyle(color: _quiet)),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 5),
               GoBoard(
                 key: const ValueKey('board'),
                 position: position,
                 lastPoint: last == pass ? null : last,
-                onPlay: _game.canPlay ? _game.play : null,
+                selectedPoint: _game.selectedPoint,
+                onSelect: _game.canPlay ? _game.selectPoint : null,
               ),
+              const SizedBox(height: 6),
+              _PlacementControls(game: _game),
+              if (_game.notice case final notice?)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          liveRegion: true,
+                          child: Text(
+                            notice,
+                            style: const TextStyle(color: Color(0xFF874625)),
+                          ),
+                        ),
+                      ),
+                      if (_game.canRetrySearch)
+                        TextButton(
+                          onPressed: _game.retrySearch,
+                          child: const Text('重试'),
+                        ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 13),
               Row(
                 children: [
@@ -259,7 +285,7 @@ class _GameScreenState extends State<_GameScreen> {
                 spacing: 8,
                 runSpacing: 4,
                 children: [
-                  FilledButton.icon(
+                  OutlinedButton.icon(
                     onPressed: _game.canPlay ? () => _game.play(pass) : null,
                     icon: const Icon(Icons.skip_next_outlined, size: 18),
                     label: const Text('停一手'),
@@ -280,28 +306,6 @@ class _GameScreenState extends State<_GameScreen> {
                   ),
                 ],
               ),
-              if (_game.notice case final notice?)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Semantics(
-                          liveRegion: true,
-                          child: Text(
-                            notice,
-                            style: const TextStyle(color: Color(0xFF874625)),
-                          ),
-                        ),
-                      ),
-                      if (_game.canRetrySearch)
-                        TextButton(
-                          onPressed: _game.retrySearch,
-                          child: const Text('重试'),
-                        ),
-                    ],
-                  ),
-                ),
               const SizedBox(height: 14),
               const Text(
                 '中国规则（OGS） · 白贴 7.5 点',
@@ -312,6 +316,86 @@ class _GameScreenState extends State<_GameScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _PlacementControls extends StatelessWidget {
+  const _PlacementControls({required this.game});
+
+  final GameController game;
+
+  @override
+  Widget build(BuildContext context) {
+    final position = game.position!;
+    final point = game.selectedPoint;
+    final occupied = point != null && position.stones[point] != 0;
+    final label = point == null
+        ? (game.canPlay ? '点选交叉点' : '')
+        : '预选 ${boardCoordinate(position.size, point)}${occupied ? ' · 已有棋子' : ''}';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            Wrap(
+              children: [
+                for (final (icon, tooltip, dx, dy) in const [
+                  (Icons.arrow_back, '向左', -1, 0),
+                  (Icons.arrow_upward, '向上', 0, -1),
+                  (Icons.arrow_downward, '向下', 0, 1),
+                  (Icons.arrow_forward, '向右', 1, 0),
+                ])
+                  IconButton(
+                    tooltip: tooltip,
+                    onPressed: game.selectionNeighbor(dx, dy) == null
+                        ? null
+                        : () => game.shiftSelection(dx, dy),
+                    icon: Icon(icon),
+                  ),
+              ],
+            ),
+            FilledButton(
+              onPressed: game.canConfirmSelection
+                  ? game.confirmSelection
+                  : null,
+              style: const ButtonStyle(
+                padding: WidgetStatePropertyAll(
+                  EdgeInsets.symmetric(horizontal: 16),
+                ),
+              ),
+              child: const Text('确认落子'),
+            ),
+          ],
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: Semantics(
+                liveRegion: true,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: occupied ? const Color(0xFF874625) : _quiet,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: game.canPlay && point != null
+                  ? () => game.selectPoint(null)
+                  : null,
+              child: const Text('取消选点'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

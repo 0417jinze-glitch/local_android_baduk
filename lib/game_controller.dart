@@ -7,6 +7,8 @@ import 'game.dart';
 import 'local_store.dart';
 import 'native_engine.dart';
 
+const _illegalMoveNotice = '这里不能落子，请选择其他交叉点。';
+
 class GameController extends ChangeNotifier {
   GameController([this._store]);
 
@@ -15,6 +17,7 @@ class GameController extends ChangeNotifier {
   NativeEngine? _engine;
   GameRecord _record = const GameRecord();
   Position? _position;
+  int? _selectedPoint;
   String? _notice;
   bool _busy = false;
   bool _searching = false;
@@ -24,6 +27,7 @@ class GameController extends ChangeNotifier {
 
   GameRecord get record => _record;
   Position? get position => _position;
+  int? get selectedPoint => _selectedPoint;
   String? get notice => _notice;
   bool get busy => _busy;
   bool get searching => _searching;
@@ -33,6 +37,11 @@ class GameController extends ChangeNotifier {
       !_busy &&
       _record.result == null &&
       _position!.next == _record.human;
+  bool get canConfirmSelection {
+    final point = _selectedPoint;
+    return canPlay && point != null && _position!.stones[point] == 0;
+  }
+
   bool get canUndo =>
       ready &&
       !_busy &&
@@ -135,6 +144,36 @@ class GameController extends ChangeNotifier {
     if (canPlay) await _change(() => _play(point));
   }
 
+  void selectPoint(int? point) {
+    if (!canPlay || point == _selectedPoint) return;
+    if (point != null && (point < 0 || point >= _position!.stones.length)) {
+      return;
+    }
+    _selectedPoint = point;
+    if (_notice == _illegalMoveNotice) _notice = null;
+    notifyListeners();
+  }
+
+  int? selectionNeighbor(int dx, int dy) {
+    final point = _selectedPoint;
+    if (!canPlay || point == null) return null;
+    final size = _position!.size;
+    final x = point % size + dx;
+    final y = point ~/ size + dy;
+    if (x < 0 || x >= size || y < 0 || y >= size) return null;
+    return y * size + x;
+  }
+
+  void shiftSelection(int dx, int dy) {
+    final point = selectionNeighbor(dx, dy);
+    if (point != null) selectPoint(point);
+  }
+
+  Future<void> confirmSelection() async {
+    final point = _selectedPoint;
+    if (point != null && canConfirmSelection) await play(point);
+  }
+
   Future<void> undo() async {
     if (!canUndo) return;
     await _change(() async {
@@ -182,6 +221,9 @@ class GameController extends ChangeNotifier {
 
   Future<void> _commit(GameRecord record, Position position) async {
     await _store!.write(record);
+    if (!identical(position, _position) || record.result != null) {
+      _selectedPoint = null;
+    }
     _record = record;
     _position = position;
   }
@@ -201,7 +243,7 @@ class GameController extends ChangeNotifier {
     try {
       await operation();
     } on IllegalMove {
-      _notice = '这里不能落子，请选择其他交叉点。';
+      _notice = _illegalMoveNotice;
     } catch (error) {
       debugPrint('Game operation failed: $error');
       try {
@@ -210,6 +252,7 @@ class GameController extends ChangeNotifier {
       } catch (error) {
         debugPrint('Game rollback failed: $error');
         _position = null;
+        _selectedPoint = null;
         _notice = '本地对局暂时无法继续，请重试加载。';
       }
     } finally {

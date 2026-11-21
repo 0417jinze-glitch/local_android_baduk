@@ -8,17 +8,22 @@ import 'game.dart';
 
 const _columnNames = 'ABCDEFGHJKLMNOPQRST';
 
+String boardCoordinate(int size, int point) =>
+    '${_columnNames[point % size]}${size - point ~/ size}';
+
 class GoBoard extends StatelessWidget {
   const GoBoard({
     required this.position,
     required this.lastPoint,
-    required this.onPlay,
+    required this.selectedPoint,
+    required this.onSelect,
     super.key,
   });
 
   final Position position;
   final int? lastPoint;
-  final ValueChanged<int>? onPlay;
+  final int? selectedPoint;
+  final ValueChanged<int>? onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -45,14 +50,20 @@ class GoBoard extends StatelessWidget {
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 excludeFromSemantics: true,
-                onTapUp: onPlay == null
+                onTapUp: onSelect == null
                     ? null
                     : (details) {
                         final point = grid.pointAt(details.localPosition);
-                        if (point != null) onPlay!(point);
+                        if (point != null) onSelect!(point);
                       },
                 child: CustomPaint(
-                  painter: _BoardPainter(grid, position, lastPoint, onPlay),
+                  painter: _BoardPainter(
+                    grid,
+                    position,
+                    lastPoint,
+                    selectedPoint,
+                    onSelect,
+                  ),
                   child: const SizedBox.expand(),
                 ),
               ),
@@ -89,12 +100,19 @@ class _Grid {
 }
 
 class _BoardPainter extends CustomPainter {
-  _BoardPainter(this.grid, this.position, this.lastPoint, this.onPlay);
+  _BoardPainter(
+    this.grid,
+    this.position,
+    this.lastPoint,
+    this.selectedPoint,
+    this.onSelect,
+  );
 
   final _Grid grid;
   final Position position;
   final int? lastPoint;
-  final ValueChanged<int>? onPlay;
+  final int? selectedPoint;
+  final ValueChanged<int>? onSelect;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -157,6 +175,11 @@ class _BoardPainter extends CustomPainter {
       final center = grid.center(point % count, point ~/ count);
       _stone(canvas, center, stone == 1, point == lastPoint);
     }
+
+    if (selectedPoint case final point?) {
+      final center = grid.center(point % count, point ~/ count);
+      _preview(canvas, center, occupied: position.stones[point] != 0);
+    }
   }
 
   void _label(Canvas canvas, String text, Offset center) {
@@ -206,6 +229,36 @@ class _BoardPainter extends CustomPainter {
     }
   }
 
+  void _preview(Canvas canvas, Offset center, {required bool occupied}) {
+    final radius = grid.step * 0.43;
+    if (!occupied) {
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..color = position.next == Stone.black
+              ? const Color(0x88323A33)
+              : const Color(0xBBFFF9E7),
+      );
+    }
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = const Color(0xFFF9F4E5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4,
+    );
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = occupied ? const Color(0xFF874625) : const Color(0xFF205F4B)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
   @override
   SemanticsBuilderCallback get semanticsBuilder => (_) {
     final count = grid.size;
@@ -224,10 +277,11 @@ class _BoardPainter extends CustomPainter {
           height: grid.step,
         ),
         properties: SemanticsProperties(
-          label: '${_columnNames[x]}${count - y} $label',
+          label: '${boardCoordinate(count, point)} $label',
           textDirection: TextDirection.ltr,
-          button: onPlay != null,
-          onTap: onPlay == null ? null : () => onPlay!(point),
+          button: onSelect != null,
+          selected: point == selectedPoint ? true : null,
+          onTap: onSelect == null ? null : () => onSelect!(point),
         ),
       );
     });
@@ -237,10 +291,11 @@ class _BoardPainter extends CustomPainter {
   bool shouldRepaint(_BoardPainter oldDelegate) =>
       grid.width != oldDelegate.grid.width ||
       position != oldDelegate.position ||
-      lastPoint != oldDelegate.lastPoint;
+      lastPoint != oldDelegate.lastPoint ||
+      selectedPoint != oldDelegate.selectedPoint;
 
   @override
   bool shouldRebuildSemantics(_BoardPainter oldDelegate) =>
       shouldRepaint(oldDelegate) ||
-      (onPlay == null) != (oldDelegate.onPlay == null);
+      (onSelect == null) != (oldDelegate.onSelect == null);
 }
