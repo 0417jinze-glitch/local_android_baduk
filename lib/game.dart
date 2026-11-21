@@ -103,6 +103,8 @@ class Position {
   final GameResult? result;
 }
 
+typedef PositionEstimate = ({double? whiteLead, List<double> whiteOwnership});
+
 enum ResultKind { scored, resignation }
 
 class GameResult {

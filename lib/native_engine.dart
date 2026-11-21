@@ -10,7 +10,10 @@ class IllegalMove implements Exception {
   const IllegalMove();
 }
 
-typedef SearchResult = ({double? whiteLead, List<Candidate> candidates});
+typedef SearchResult = ({
+  PositionEstimate estimate,
+  List<Candidate> candidates,
+});
 
 class NativeEngine {
   NativeEngine._() {
@@ -240,7 +243,15 @@ Object? _execute(
         final move = result.candidates[index];
         return Candidate(move.point, move.visits, move.utility);
       });
-      return (whiteLead: lead.isFinite ? lead : null, candidates: candidates);
+      final estimate = (
+        whiteLead: lead.isFinite ? lead : null,
+        whiteOwnership: List<double>.generate(
+          result.ownershipCount,
+          (point) => result.whiteOwnership[point],
+          growable: false,
+        ),
+      );
+      return (estimate: estimate, candidates: candidates);
     case _Close():
       throw StateError('Close must be handled by the worker');
   }
@@ -299,6 +310,12 @@ final class _NativeSearchResult extends Struct {
 
   @Array(16)
   external Array<_NativeCandidate> candidates;
+
+  @Int32()
+  external int ownershipCount;
+
+  @Array(361)
+  external Array<Float> whiteOwnership;
 }
 
 final _library = DynamicLibrary.open('libweiqi_katago.so');

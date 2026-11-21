@@ -36,7 +36,7 @@ class GameController extends ChangeNotifier {
   bool get busy => _busy;
   bool get searching => _aiSearch != null;
   bool get ready => _position != null;
-  bool get canEstimateLead => ready && !_busy && _record.result == null;
+  bool get canEstimate => ready && !_busy && _record.result == null;
   bool get canPlay =>
       ready &&
       !_busy &&
@@ -215,10 +215,10 @@ class GameController extends ChangeNotifier {
     if (point != null && canConfirmSelection) await play(point);
   }
 
-  Future<double?> estimateLead() async {
-    if (!canEstimateLead || _disposed) return null;
+  Future<PositionEstimate?> estimatePosition() async {
+    if (!canEstimate || _disposed) return null;
     // An AI move is already evaluating this position when its turn is in progress.
-    if (_aiSearch case final search?) return (await search)?.whiteLead;
+    if (_aiSearch case final search?) return (await search)?.estimate;
 
     cancelEstimate();
     final token = ++_searchToken;
@@ -229,7 +229,7 @@ class GameController extends ChangeNotifier {
         _estimateBudget,
         includeCandidates: false,
       );
-      return _estimateToken == token ? result?.whiteLead : null;
+      return _estimateToken == token ? result?.estimate : null;
     } finally {
       if (_estimateToken == token) _estimateToken = null;
     }

@@ -7,6 +7,8 @@ import 'package:material_ui/material_ui.dart';
 import 'game.dart';
 
 const _columnNames = 'ABCDEFGHJKLMNOPQRST';
+const blackOwnershipMarker = Color(0xFF292E27);
+const whiteOwnershipMarker = Color(0xFFFFFDF3);
 
 String boardCoordinate(int size, int point) =>
     '${_columnNames[point % size]}${size - point ~/ size}';
@@ -17,6 +19,7 @@ class GoBoard extends StatelessWidget {
     required this.lastPoint,
     required this.selectedPoint,
     required this.onSelect,
+    this.whiteOwnership,
     super.key,
   });
 
@@ -24,6 +27,7 @@ class GoBoard extends StatelessWidget {
   final int? lastPoint;
   final int? selectedPoint;
   final ValueChanged<int>? onSelect;
+  final List<double>? whiteOwnership;
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +68,7 @@ class GoBoard extends StatelessWidget {
                     lastPoint,
                     selectedPoint,
                     onSelect,
+                    whiteOwnership,
                   ),
                   child: const SizedBox.expand(),
                 ),
@@ -104,6 +109,7 @@ class _BoardPainter extends CustomPainter {
     this.lastPoint,
     this.selectedPoint,
     this.onSelect,
+    this.whiteOwnership,
   );
 
   final _Grid grid;
@@ -111,6 +117,7 @@ class _BoardPainter extends CustomPainter {
   final int? lastPoint;
   final int? selectedPoint;
   final ValueChanged<int>? onSelect;
+  final List<double>? whiteOwnership;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -160,6 +167,10 @@ class _BoardPainter extends CustomPainter {
       }
     }
 
+    if (whiteOwnership case final map?) {
+      _drawOwnership(canvas, map);
+    }
+
     for (var point = 0; point < position.stones.length; point++) {
       final stone = position.stones[point];
       if (stone == 0) continue;
@@ -170,6 +181,41 @@ class _BoardPainter extends CustomPainter {
     if (selectedPoint case final point?) {
       final center = grid.center(point % count, point ~/ count);
       _preview(canvas, center, occupied: position.stones[point] != 0);
+    }
+  }
+
+  static Stone? _predictedOwner(double value) => switch (value) {
+    < -0.20 => Stone.black,
+    > 0.20 => Stone.white,
+    _ => null,
+  };
+
+  void _drawOwnership(Canvas canvas, List<double> map) {
+    final width = grid.step * 0.74;
+    final corners = Radius.circular(grid.step * 0.09);
+    final paint = Paint();
+    for (var point = 0; point < position.stones.length; point++) {
+      if (position.stones[point] != 0) continue;
+      final value = map[point];
+      final owner = _predictedOwner(value);
+      if (owner == null) continue;
+      final base = owner == Stone.black
+          ? blackOwnershipMarker
+          : whiteOwnershipMarker;
+      paint.color = base.withValues(
+        alpha: 0.30 + 0.66 * value.abs().clamp(0.0, 1.0),
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: grid.center(point % grid.size, point ~/ grid.size),
+            width: width,
+            height: width,
+          ),
+          corners,
+        ),
+        paint,
+      );
     }
   }
 
@@ -240,7 +286,12 @@ class _BoardPainter extends CustomPainter {
       final label = switch (position.stones[point]) {
         1 => '黑棋',
         2 => '白棋',
-        _ => '空位',
+        _ when whiteOwnership == null => '空位',
+        _ => switch (_predictedOwner(whiteOwnership![point])) {
+          Stone.black => '黑棋势力',
+          Stone.white => '白棋势力',
+          null => '归属未明',
+        },
       };
       return CustomPainterSemantics(
         rect: Rect.fromCenter(
@@ -264,7 +315,8 @@ class _BoardPainter extends CustomPainter {
       grid.width != oldDelegate.grid.width ||
       position != oldDelegate.position ||
       lastPoint != oldDelegate.lastPoint ||
-      selectedPoint != oldDelegate.selectedPoint;
+      selectedPoint != oldDelegate.selectedPoint ||
+      whiteOwnership != oldDelegate.whiteOwnership;
 
   @override
   bool shouldRebuildSemantics(_BoardPainter oldDelegate) =>

@@ -12,6 +12,7 @@
 
 #include "neuralnet/nninterface.h"
 #include "program/setup.h"
+#include "search/searchnode.h"
 
 namespace {
 
@@ -193,6 +194,21 @@ int32_t weiqi_search(WeiqiEngine* engine, uint64_t token, int32_t max_visits,
     if (search.getPrunedRootValues(values) || search.getRootValues(values)) {
       result->white_lead = values.lead;
     }
+
+    // Root evaluations already include ownership, even in ordinary move searches.
+    result->ownership_count = 0;
+    const SearchNode* root = search.getRootNode();
+    const NNOutput* output = root == nullptr ? nullptr : root->getNNOutput();
+    if (output != nullptr && output->whiteOwnerMap != nullptr) {
+      for (int y = 0; y < size; y++) {
+        for (int x = 0; x < size; x++) {
+          result->white_ownership[y * size + x] =
+              output->whiteOwnerMap[NNPos::xyToPos(x, y, output->nnXLen)];
+        }
+      }
+      result->ownership_count = size * size;
+    }
+
     result->count = 0;
     if (!include_candidates) return 1;
 

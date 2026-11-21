@@ -26,7 +26,12 @@ void main() {
             final report = await kataGo.search(++token, tier.budgetFor(size));
             final candidates = report!.candidates;
             expect(candidates, isNotEmpty);
-            expect(report.whiteLead, isNotNull);
+            expect(report.estimate.whiteLead, isNotNull);
+            expect(report.estimate.whiteOwnership, hasLength(size * size));
+            expect(
+              report.estimate.whiteOwnership,
+              everyElement(inInclusiveRange(-1, 1)),
+            );
             final chosen = candidates.first.point;
             final position = await kataGo.play(chosen);
             if (chosen != pass) {
@@ -91,8 +96,12 @@ void main() {
           );
           expect(estimate!.candidates, isEmpty);
           expect(
-            estimate.whiteLead,
+            estimate.estimate.whiteLead,
             leader == Stone.black ? lessThan(0) : greaterThan(0),
+          );
+          expect(
+            estimate.estimate.whiteOwnership[4],
+            leader == Stone.black ? lessThan(-0.2) : greaterThan(0.2),
           );
           final position = await kataGo.play(80);
           expect(position.stones.take(36), everyElement(leader.index + 1));
@@ -168,19 +177,23 @@ void main() {
         await store.write(const GameRecord(moves: opening));
         await game.load();
         game.selectPoint(41);
-        expect(await game.estimateLead(), isNotNull);
+        final estimate = await game.estimatePosition();
+        expect(estimate?.whiteLead, isNotNull);
+        expect(estimate?.whiteOwnership, hasLength(81));
         expect(game.selectedPoint, 41);
         expect(game.record.moves, opening);
         expect((await store.read())!.moves, opening);
 
-        final cancelled = game.estimateLead();
+        final cancelled = game.estimatePosition();
         game.cancelEstimate();
         expect(await cancelled, isNull);
         await game.confirmSelection();
         expect(game.searching, isTrue);
-        final duringAi = game.estimateLead();
+        final duringAi = game.estimatePosition();
         game.cancelEstimate();
-        expect(await duringAi, isNotNull);
+        final aiEstimate = await duringAi;
+        expect(aiEstimate?.whiteLead, isNotNull);
+        expect(aiEstimate?.whiteOwnership, hasLength(81));
 
         final deadline = Stopwatch()..start();
         while (!game.canPlay && deadline.elapsed < const Duration(seconds: 8)) {

@@ -31,6 +31,8 @@ typedef struct {
   double white_lead;
   int32_t count;
   WeiqiCandidate candidates[WEIQI_MAX_CANDIDATES];
+  int32_t ownership_count;
+  float white_ownership[19 * 19];
 } WeiqiSearchResult;
 
 // Points are row-major, top left first. -1 is a pass. Black is 1, white is 2.
@@ -46,6 +48,7 @@ WEIQI_API int32_t weiqi_reset(WeiqiEngine* engine, int32_t size, const int32_t* 
 WEIQI_API int32_t weiqi_play(WeiqiEngine* engine, int32_t point, WeiqiPosition* position);
 // Returns 1 for success, 0 for cancellation, or -1 for an engine failure.
 // White lead is in points, with NaN meaning unavailable. A search leaves history intact.
+// Ownership is row-major, with negative values favoring black and positive values favoring white.
 // When candidates are requested, the engine's recommendation is first.
 WEIQI_API int32_t weiqi_search(WeiqiEngine* engine, uint64_t token, int32_t max_visits,
                                double max_seconds, int32_t include_candidates,
