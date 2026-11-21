@@ -13,6 +13,7 @@ const _forest = Color(0xFF264C3B);
 const _ink = Color(0xFF24382F);
 const _quiet = Color(0xFF5C685D);
 const _border = Color(0xFFDCDDD0);
+const _gameContentPadding = EdgeInsets.symmetric(horizontal: 16);
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -206,130 +207,145 @@ class _GameScreenState extends State<_GameScreen> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620),
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
+          padding: const EdgeInsets.only(top: 4, bottom: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _StatusCard(game: _game),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Text(
-                    '${record.size} × ${record.size}',
-                    style: const TextStyle(
-                      color: _ink,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(lastText, style: const TextStyle(color: _quiet)),
-                ],
+              Padding(
+                padding: _gameContentPadding,
+                child: _StatusCard(game: _game),
               ),
               const SizedBox(height: 5),
-              GoBoard(
-                key: const ValueKey('board'),
-                position: position,
-                lastPoint: last == pass ? null : last,
-                selectedPoint: _game.selectedPoint,
-                onSelect: _game.canPlay ? _game.selectPoint : null,
-              ),
-              const SizedBox(height: 6),
-              _PlacementControls(game: _game),
-              if (_game.notice case final notice?)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Semantics(
-                          liveRegion: true,
-                          child: Text(
-                            notice,
-                            style: const TextStyle(color: Color(0xFF874625)),
-                          ),
-                        ),
+              Padding(
+                padding: _gameContentPadding,
+                child: Row(
+                  children: [
+                    Text(
+                      '${record.size} × ${record.size}',
+                      style: const TextStyle(
+                        color: _ink,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
                       ),
-                      if (_game.canRetrySearch)
-                        TextButton(
-                          onPressed: _game.retrySearch,
-                          child: const Text('重试'),
-                        ),
-                    ],
-                  ),
+                    ),
+                    const Spacer(),
+                    Text(lastText, style: const TextStyle(color: _quiet)),
+                  ],
                 ),
-              const SizedBox(height: 13),
-              Row(
-                children: [
-                  const Text(
-                    'AI 难度',
-                    style: TextStyle(
-                      color: _quiet,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SegmentedButton<Difficulty>(
-                      showSelectedIcon: false,
-                      style: const ButtonStyle(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      segments: [
-                        for (final level in Difficulty.values)
-                          ButtonSegment(value: level, label: Text(level.label)),
-                      ],
-                      selected: {record.difficulty},
-                      onSelectionChanged: _game.busy
-                          ? null
-                          : (levels) =>
-                                unawaited(_game.setDifficulty(levels.single)),
-                    ),
-                  ),
-                ],
               ),
-              const SizedBox(height: 13),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: _game.canPlay ? () => _game.play(pass) : null,
-                    icon: const Icon(Icons.skip_next_outlined, size: 18),
-                    label: const Text('停一手'),
-                  ),
-                  OutlinedButton(
-                    onPressed: _game.canUndo ? _game.undo : null,
-                    child: const Text('悔棋'),
-                  ),
-                  OutlinedButton(
-                    onPressed: _game.busy ? null : _restart,
-                    child: const Text('重开'),
-                  ),
-                  TextButton(
-                    onPressed: _game.busy || record.result != null
-                        ? null
-                        : _resign,
-                    child: const Text('认输'),
-                  ),
-                ],
+              const SizedBox(height: 3),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: GoBoard(
+                  key: const ValueKey('board'),
+                  position: position,
+                  lastPoint: last == pass ? null : last,
+                  selectedPoint: _game.selectedPoint,
+                  onSelect: _game.canPlay ? _game.selectPoint : null,
+                ),
               ),
-              const SizedBox(height: 8),
-              _ModelPicker(
-                model: record.model,
-                onChanged: _game.busy ? null : _game.setModel,
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                '中国规则（OGS） · 白贴 7.5 点',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: _quiet, fontSize: 12),
+              const SizedBox(height: 3),
+              Padding(
+                padding: _gameContentPadding,
+                child: _buildGameControls(record),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGameControls(GameRecord record) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _PlacementControls(game: _game),
+        if (_game.notice case final notice?)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      notice,
+                      style: const TextStyle(color: Color(0xFF874625)),
+                    ),
+                  ),
+                ),
+                if (_game.canRetrySearch)
+                  TextButton(
+                    onPressed: _game.retrySearch,
+                    child: const Text('重试'),
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 13),
+        Row(
+          children: [
+            const Text(
+              'AI 难度',
+              style: TextStyle(color: _quiet, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SegmentedButton<Difficulty>(
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                segments: [
+                  for (final level in Difficulty.values)
+                    ButtonSegment(value: level, label: Text(level.label)),
+                ],
+                selected: {record.difficulty},
+                onSelectionChanged: _game.busy
+                    ? null
+                    : (levels) => unawaited(_game.setDifficulty(levels.single)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 13),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _game.canPlay ? () => _game.play(pass) : null,
+              icon: const Icon(Icons.skip_next_outlined, size: 18),
+              label: const Text('停一手'),
+            ),
+            OutlinedButton(
+              onPressed: _game.canUndo ? _game.undo : null,
+              child: const Text('悔棋'),
+            ),
+            OutlinedButton(
+              onPressed: _game.busy ? null : _restart,
+              child: const Text('重开'),
+            ),
+            TextButton(
+              onPressed: _game.busy || record.result != null ? null : _resign,
+              child: const Text('认输'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _ModelPicker(
+          model: record.model,
+          onChanged: _game.busy ? null : _game.setModel,
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          '中国规则（OGS） · 白贴 7.5 点',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: _quiet, fontSize: 12),
+        ),
+      ],
     );
   }
 }
@@ -437,7 +453,7 @@ class _StatusCard extends StatelessWidget {
         border: Border.all(color: _border),
         borderRadius: BorderRadius.circular(14),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -450,7 +466,7 @@ class _StatusCard extends StatelessWidget {
               _PlayerLabel('KataGo', record.human.opponent),
             ],
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 5),
           Semantics(
             liveRegion: true,
             child: Row(

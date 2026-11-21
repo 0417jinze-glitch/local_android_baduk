@@ -27,6 +27,7 @@ class GoBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const corners = BorderRadius.all(Radius.circular(10));
     return AspectRatio(
       aspectRatio: 1,
       child: LayoutBuilder(
@@ -35,7 +36,7 @@ class GoBoard extends StatelessWidget {
           return DecoratedBox(
             decoration: BoxDecoration(
               color: const Color(0xFFE9BC7D),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: corners,
               border: Border.all(color: const Color(0xFFD6A668)),
               boxShadow: const [
                 BoxShadow(
@@ -46,7 +47,7 @@ class GoBoard extends StatelessWidget {
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: corners,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 excludeFromSemantics: true,
@@ -76,25 +77,22 @@ class GoBoard extends StatelessWidget {
 }
 
 class _Grid {
-  _Grid(this.width, this.size)
-    : inset = (width * 0.062).clamp(16.0, 30.0),
-      step = (width - 2 * (width * 0.062).clamp(16.0, 30.0)) / (size - 1);
+  _Grid(this.width, this.size) : step = (width - 2 * _rim) / size;
+
+  static const _rim = 4.0;
 
   final double width;
   final int size;
-  final double inset;
   final double step;
+
+  double get inset => _rim + step / 2;
 
   Offset center(int x, int y) => Offset(inset + x * step, inset + y * step);
 
   int? pointAt(Offset offset) {
-    final x = ((offset.dx - inset) / step).round();
-    final y = ((offset.dy - inset) / step).round();
-    if (x < 0 || x >= size || y < 0 || y >= size) return null;
-    final delta = offset - center(x, y);
-    if (delta.dx.abs() > step * 0.49 || delta.dy.abs() > step * 0.49) {
-      return null;
-    }
+    if (!(Offset.zero & Size.square(width)).contains(offset)) return null;
+    final x = ((offset.dx - _rim) / step).floor().clamp(0, size - 1);
+    final y = ((offset.dy - _rim) / step).floor().clamp(0, size - 1);
     return y * size + x;
   }
 }
@@ -162,13 +160,6 @@ class _BoardPainter extends CustomPainter {
       }
     }
 
-    for (var i = 0; i < count; i++) {
-      final column = _columnNames[i];
-      final row = '${count - i}';
-      _label(canvas, column, Offset(grid.center(i, 0).dx, grid.inset / 2));
-      _label(canvas, row, Offset(grid.inset / 2, grid.center(0, i).dy));
-    }
-
     for (var point = 0; point < position.stones.length; point++) {
       final stone = position.stones[point];
       if (stone == 0) continue;
@@ -180,25 +171,6 @@ class _BoardPainter extends CustomPainter {
       final center = grid.center(point % count, point ~/ count);
       _preview(canvas, center, occupied: position.stones[point] != 0);
     }
-  }
-
-  void _label(Canvas canvas, String text, Offset center) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: TextStyle(
-          color: const Color(0xFF63472D),
-          fontSize: (grid.inset * 0.48).clamp(8.0, 12.0),
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    painter.paint(
-      canvas,
-      center - Offset(painter.width / 2, painter.height / 2),
-    );
-    painter.dispose();
   }
 
   void _stone(Canvas canvas, Offset center, bool black, bool isLast) {
